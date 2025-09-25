@@ -198,6 +198,20 @@ describe('Flaky Randomness-Based Tests', () => {
     const results = { common: 0, rare: 0, legendary: 0 };
     const iterations = 20;
     
+    // Mock Math.random() with predetermined values for deterministic testing
+    const mockRandomValues = [
+      0.02, 0.8, 0.15, 0.04, 0.9, 0.22, 0.01, 0.75, 0.3, 0.95,
+      0.03, 0.65, 0.18, 0.85, 0.12, 0.45, 0.02, 0.7, 0.25, 0.88
+    ];
+    let callCount = 0;
+    
+    const originalRandom = Math.random;
+    Math.random = jest.fn(() => {
+      const value = mockRandomValues[callCount % mockRandomValues.length];
+      callCount++;
+      return value;
+    });
+    
     // Mock weighted random selection
     const mockWeightedSelect = () => {
       const random = Math.random();
@@ -212,10 +226,17 @@ describe('Flaky Randomness-Based Tests', () => {
       results[result]++;
     }
 
-    // These assertions assume specific distribution
-    expect(results.common).toBeGreaterThan(10); // FLAKY: might get unlucky
-    expect(results.rare).toBeGreaterThan(3); // FLAKY: might get no rare items
-    expect(results.legendary).toBe(1); // FLAKY: might get 0 or multiple legendary
-    expect(results.legendary).toBeGreaterThan(0); // FLAKY: might get no legendary items
+    // Restore original Math.random
+    Math.random = originalRandom;
+
+    // Deterministic assertions based on mocked values
+    // Values: [0.02, 0.8, 0.15, 0.04, 0.9, 0.22, 0.01, 0.75, 0.3, 0.95, 0.03, 0.65, 0.18, 0.85, 0.12, 0.45, 0.02, 0.7, 0.25, 0.88]
+    // Legendary (< 0.05): 0.02, 0.04, 0.01, 0.03, 0.02 = 5 values
+    // Rare (0.05 <= x < 0.30): 0.15, 0.22, 0.18, 0.12, 0.25 = 5 values  
+    // Common (>= 0.30): 0.8, 0.9, 0.75, 0.95, 0.65, 0.85, 0.45, 0.7, 0.88, 0.3 = 10 values
+    expect(results.legendary).toBe(5);
+    expect(results.rare).toBe(5);
+    expect(results.common).toBe(10);
+    expect(results.common + results.rare + results.legendary).toBe(iterations);
   });
 });
