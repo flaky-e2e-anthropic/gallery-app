@@ -66,37 +66,43 @@ describe('Flaky Network-Dependent Tests', () => {
     }
   });
 
-  // FLAKY TEST 20: Multiple concurrent requests
+  // FIXED: Multiple concurrent requests
   test('should handle concurrent API calls (FLAKY: race conditions)', async () => {
-    const results = [];
+    jest.useFakeTimers();
     
-    // Mock multiple API endpoints with different response times
+    // Mock multiple API endpoints with fixed response times for deterministic behavior
     const mockApiCall1 = () => new Promise(resolve => {
-      setTimeout(() => resolve({ id: 1, data: 'First API' }), Math.random() * 200 + 100);
+      setTimeout(() => resolve({ id: 1, data: 'First API' }), 100);
     });
     
     const mockApiCall2 = () => new Promise(resolve => {
-      setTimeout(() => resolve({ id: 2, data: 'Second API' }), Math.random() * 300 + 50);
+      setTimeout(() => resolve({ id: 2, data: 'Second API' }), 200);
     });
     
     const mockApiCall3 = () => new Promise(resolve => {
-      setTimeout(() => resolve({ id: 3, data: 'Third API' }), Math.random() * 150 + 75);
+      setTimeout(() => resolve({ id: 3, data: 'Third API' }), 150);
     });
 
     // Start all requests concurrently
     const promises = [
-      mockApiCall1().then(result => results.push(result)),
-      mockApiCall2().then(result => results.push(result)),
-      mockApiCall3().then(result => results.push(result))
+      mockApiCall1(),
+      mockApiCall2(),
+      mockApiCall3()
     ];
     
-    await Promise.all(promises);
+    // Advance timers to complete all promises
+    jest.advanceTimersByTime(200);
     
-    // These assertions assume specific order based on timing
+    const results = await Promise.all(promises);
+    
+    // Test that all requests complete successfully instead of order
     expect(results).toHaveLength(3);
-    expect(results[0].id).toBe(3); // FLAKY: order depends on random timing
-    expect(results[1].id).toBe(1); // FLAKY: order depends on random timing
-    expect(results[2].id).toBe(2); // FLAKY: order depends on random timing
+    expect(results.map(r => r.id)).toEqual(expect.arrayContaining([1, 2, 3]));
+    expect(results.find(r => r.id === 1)).toEqual({ id: 1, data: 'First API' });
+    expect(results.find(r => r.id === 2)).toEqual({ id: 2, data: 'Second API' });
+    expect(results.find(r => r.id === 3)).toEqual({ id: 3, data: 'Third API' });
+    
+    jest.useRealTimers();
   });
 
   // FLAKY TEST 21: Retry logic with intermittent failures
