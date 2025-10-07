@@ -131,32 +131,36 @@ describe('Flaky Memory and State Pollution Tests', () => {
   });
 
   // FLAKY TEST 30: Timer pollution
-  test('should handle timers correctly (FLAKY: timer pollution)', (done) => {
+  test('should handle timers correctly (FLAKY: timer pollution)', () => {
+    // Use Jest fake timers for deterministic behavior
+    jest.useFakeTimers();
+
     let timerCount = 0;
-    
-    // Mock timer that might not be cleaned up
+    let activeInterval = null;
+
+    // Mock timer with explicit cleanup tracking
     const mockStartTimer = () => {
-      const interval = setInterval(() => {
+      activeInterval = setInterval(() => {
         timerCount++;
       }, 50);
-      
-      // Store interval but don't always clean it up
-      if (Math.random() > 0.5) {
-        setTimeout(() => {
-          clearInterval(interval);
-        }, 200);
-      }
-      // 50% chance timer keeps running - causes pollution
+
+      return activeInterval;
     };
 
-    mockStartTimer();
-    
-    setTimeout(() => {
-      // Timer count depends on whether previous test timers are still running
-      expect(timerCount).toBe(4); // FLAKY: might be higher if previous timers still running
-      expect(timerCount).toBeGreaterThan(0);
-      done();
-    }, 250);
+    const intervalId = mockStartTimer();
+
+    // Advance timers by 200ms (4 intervals of 50ms each)
+    jest.advanceTimersByTime(200);
+
+    // Deterministic assertion: exactly 4 intervals should have fired
+    expect(timerCount).toBe(4);
+    expect(timerCount).toBeGreaterThan(0);
+
+    // Explicit cleanup to prevent timer pollution
+    clearInterval(intervalId);
+
+    // Restore real timers
+    jest.useRealTimers();
   });
 
   // FLAKY TEST 31: Module state pollution
