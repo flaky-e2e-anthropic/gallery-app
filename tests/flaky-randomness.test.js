@@ -192,18 +192,39 @@ describe('Flaky Randomness-Based Tests', () => {
     }, 200); // Fixed 200ms check
   });
 
-  // FLAKY TEST 18: Weighted random selection
-  test('should respect weighted probabilities (FLAKY: weighted randomness)', () => {
+  // FLAKY TEST 18: Weighted random selection - FIXED
+  test('should respect weighted probabilities (FIXED: deterministic seed)', () => {
+    // Mulberry32 - Fast seeded PRNG for deterministic testing
+    const createSeededRandom = (seed) => {
+      let state = seed;
+      return () => {
+        state = (state + 0x6D2B79F5) | 0;
+        let t = Math.imul(state ^ (state >>> 15), 1 | state);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    };
+
     const weights = { common: 0.7, rare: 0.25, legendary: 0.05 };
     const results = { common: 0, rare: 0, legendary: 0 };
     const iterations = 20;
-    
-    // Mock weighted random selection
+
+    // Mock Math.random with seeded PRNG for deterministic behavior
+    const seededRandom = createSeededRandom(42);
+    jest.spyOn(Math, 'random').mockImplementation(seededRandom);
+
+    // Fixed weighted random selection (proper cumulative distribution)
     const mockWeightedSelect = () => {
       const random = Math.random();
-      if (random < weights.legendary) return 'legendary';
-      if (random < weights.legendary + weights.rare) return 'rare';
-      return 'common';
+      let cumulative = 0;
+
+      cumulative += weights.common;
+      if (random < cumulative) return 'common';
+
+      cumulative += weights.rare;
+      if (random < cumulative) return 'rare';
+
+      return 'legendary';
     };
 
     // Run multiple selections
@@ -212,10 +233,13 @@ describe('Flaky Randomness-Based Tests', () => {
       results[result]++;
     }
 
-    // These assertions assume specific distribution
-    expect(results.common).toBeGreaterThan(10); // FLAKY: might get unlucky
-    expect(results.rare).toBeGreaterThan(3); // FLAKY: might get no rare items
-    expect(results.legendary).toBe(1); // FLAKY: might get 0 or multiple legendary
-    expect(results.legendary).toBeGreaterThan(0); // FLAKY: might get no legendary items
+    // Deterministic assertions based on seed 42
+    expect(results.common).toBe(16);  // Deterministic with seed 42
+    expect(results.rare).toBe(4);     // Deterministic with seed 42
+    expect(results.legendary).toBe(0); // Deterministic with seed 42
+    expect(results.common + results.rare + results.legendary).toBe(iterations);
+
+    // Cleanup
+    Math.random.mockRestore();
   });
 });
