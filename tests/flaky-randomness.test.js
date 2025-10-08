@@ -172,9 +172,14 @@ describe('Flaky Randomness-Based Tests', () => {
     let operationCompleted = false;
     const startTime = Date.now();
     
+    // Mock Math.random to return deterministic value (0.5)
+    // This ensures delay is always 0.5 * 200 + 100 = 200ms
+    const originalMathRandom = Math.random;
+    Math.random = jest.fn(() => 0.5);
+    
     // Mock operation with random delay
     const mockRandomDelayOperation = () => {
-      const delay = Math.random() * 200 + 100; // 100-300ms
+      const delay = Math.random() * 200 + 100; // Now always 200ms
       setTimeout(() => {
         operationCompleted = true;
       }, delay);
@@ -186,10 +191,13 @@ describe('Flaky Randomness-Based Tests', () => {
     setTimeout(() => {
       const elapsedTime = Date.now() - startTime;
       
-      expect(operationCompleted).toBe(true); // FLAKY: might not be completed yet
-      expect(elapsedTime).toBeLessThan(250); // FLAKY: delay might be longer
+      expect(operationCompleted).toBe(true);
+      expect(elapsedTime).toBeLessThan(250);
+      
+      // Restore original Math.random
+      Math.random = originalMathRandom;
       done();
-    }, 200); // Fixed 200ms check
+    }, 210); // Slightly longer than the mocked delay
   });
 
   // FLAKY TEST 18: Weighted random selection
