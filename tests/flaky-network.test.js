@@ -184,57 +184,59 @@ describe('Flaky Network-Dependent Tests', () => {
     expect(result3.fromCache).toBe(false); // FLAKY: timing might be off, cache might still be valid
   });
 
-  // FLAKY TEST 23: WebSocket connection simulation
-  test('should handle WebSocket events (FLAKY: connection timing)', (done) => {
+  // FIXED: WebSocket connection simulation - now deterministic
+  test('should handle WebSocket events (FLAKY: connection timing)', async () => {
     let connectionState = 'disconnected';
     let messagesReceived = [];
     
-    // Mock WebSocket behavior
+    // Mock WebSocket behavior with Promise-based approach
     const mockWebSocket = {
       connect: () => {
-        // Random connection delay
-        setTimeout(() => {
+        return new Promise((resolve) => {
           connectionState = 'connected';
           mockWebSocket.onopen && mockWebSocket.onopen();
-        }, Math.random() * 100 + 50);
+          resolve();
+        });
       },
       
       send: (message) => {
-        if (connectionState === 'connected') {
-          // Simulate message echo with delay
-          setTimeout(() => {
-            messagesReceived.push(`Echo: ${message}`);
-            mockWebSocket.onmessage && mockWebSocket.onmessage({ data: `Echo: ${message}` });
-          }, Math.random() * 50 + 10);
-        }
+        return new Promise((resolve) => {
+          if (connectionState === 'connected') {
+            const echoMessage = `Echo: ${message}`;
+            messagesReceived.push(echoMessage);
+            mockWebSocket.onmessage && mockWebSocket.onmessage({ data: echoMessage });
+            resolve();
+          } else {
+            throw new Error('WebSocket not connected');
+          }
+        });
       },
       
       onopen: null,
       onmessage: null
     };
 
+    let messageReceived = false;
+    
     // Set up event handlers
-    mockWebSocket.onopen = () => {
-      mockWebSocket.send('Hello WebSocket');
+    mockWebSocket.onopen = async () => {
+      await mockWebSocket.send('Hello WebSocket');
     };
     
     mockWebSocket.onmessage = (event) => {
-      // Check state after receiving message
-      setTimeout(() => {
-        expect(connectionState).toBe('connected');
-        expect(messagesReceived).toContain('Echo: Hello WebSocket'); // FLAKY: message might not arrive yet
-        expect(messagesReceived).toHaveLength(1);
-        done();
-      }, 10);
+      messageReceived = true;
     };
 
-    // Start connection
-    mockWebSocket.connect();
+    // Connect and wait for completion
+    await mockWebSocket.connect();
     
-    // Check connection state too early
-    setTimeout(() => {
-      expect(connectionState).toBe('connected'); // FLAKY: connection might not be established yet
-    }, 75);
+    // Verify connection state immediately after connection
+    expect(connectionState).toBe('connected');
+    
+    // Wait for message to be processed
+    expect(messageReceived).toBe(true);
+    expect(messagesReceived).toContain('Echo: Hello WebSocket');
+    expect(messagesReceived).toHaveLength(1);
   });
 
   // FLAKY TEST 24: File upload with progress
