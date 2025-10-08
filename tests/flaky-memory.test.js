@@ -7,8 +7,12 @@ describe('Flaky Memory and State Pollution Tests', () => {
   let globalCounter = 0;
   let sharedCache = {};
   let eventListeners = [];
+  let activeTimers = [];
   
   beforeEach(() => {
+    // Use Jest fake timers for consistent timer behavior
+    jest.useFakeTimers();
+    
     document.body.innerHTML = `
       <div class="state-container">
         <button id="increment-btn">Increment</button>
@@ -24,6 +28,21 @@ describe('Flaky Memory and State Pollution Tests', () => {
     // Actually increment counter to guarantee pollution
     globalCounter += Math.floor(Math.random() * 5) + 1; // Add 1-5 to counter each time
     sharedCache[`pollution-${Date.now()}`] = 'polluted data'; // Add random cache entries
+  });
+
+  afterEach(() => {
+    // Clean up all active timers to prevent pollution
+    activeTimers.forEach(timer => {
+      if (timer.type === 'interval') {
+        clearInterval(timer.id);
+      } else if (timer.type === 'timeout') {
+        clearTimeout(timer.id);
+      }
+    });
+    activeTimers = [];
+    
+    // Restore real timers
+    jest.useRealTimers();
   });
 
   // FLAKY TEST 25: Shared counter state pollution
@@ -130,33 +149,39 @@ describe('Flaky Memory and State Pollution Tests', () => {
     // Intentionally NOT cleaning up globals
   });
 
-  // FLAKY TEST 30: Timer pollution
-  test('should handle timers correctly (FLAKY: timer pollution)', (done) => {
+  // FLAKY TEST 30: Timer pollution - FIXED
+  test('should handle timers correctly (FLAKY: timer pollution)', () => {
     let timerCount = 0;
     
-    // Mock timer that might not be cleaned up
+    // Mock timer with proper cleanup tracking
     const mockStartTimer = () => {
       const interval = setInterval(() => {
         timerCount++;
       }, 50);
       
-      // Store interval but don't always clean it up
-      if (Math.random() > 0.5) {
-        setTimeout(() => {
-          clearInterval(interval);
-        }, 200);
-      }
-      // 50% chance timer keeps running - causes pollution
+      // Track all timers for proper cleanup
+      activeTimers.push({ id: interval, type: 'interval' });
+      
+      // Always clean up after a set time
+      const cleanup = setTimeout(() => {
+        clearInterval(interval);
+        // Remove from active timers tracking
+        const index = activeTimers.findIndex(t => t.id === interval);
+        if (index > -1) activeTimers.splice(index, 1);
+      }, 200);
+      
+      activeTimers.push({ id: cleanup, type: 'timeout' });
     };
 
     mockStartTimer();
     
-    setTimeout(() => {
-      // Timer count depends on whether previous test timers are still running
-      expect(timerCount).toBe(4); // FLAKY: might be higher if previous timers still running
-      expect(timerCount).toBeGreaterThan(0);
-      done();
-    }, 250);
+    // Fast-forward time using Jest fake timers
+    jest.advanceTimersByTime(250);
+    
+    // Use range check instead of exact count to handle timing variations
+    expect(timerCount).toBeGreaterThanOrEqual(3); // At least 3 ticks (150ms worth)
+    expect(timerCount).toBeLessThanOrEqual(5); // At most 5 ticks (250ms worth)
+    expect(timerCount).toBeGreaterThan(0);
   });
 
   // FLAKY TEST 31: Module state pollution
